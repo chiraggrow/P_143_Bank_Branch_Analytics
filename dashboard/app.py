@@ -38,7 +38,8 @@ else:
     st.error("FastAPI connection failed.")
     api_branches = pd.DataFrame()
 
-    overview_response = requests.get(
+
+overview_response = requests.get(
     f"{API_URL}/analytics/overview"
 )
 
