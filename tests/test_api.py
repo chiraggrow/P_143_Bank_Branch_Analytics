@@ -16,9 +16,15 @@ def test_get_branches():
 
 
 def test_get_branch():
-    response = client.get("/branches/101")
+    response = client.get("/branches/1001")
     assert response.status_code == 200
-    assert response.json()["Branch_ID"] == 101
+    assert response.json()["Branch_ID"] == 1001
+
+def test_branch_not_found():
+    response = client.get("/branches/999999")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Branch not found"
 
 
 def test_overview():

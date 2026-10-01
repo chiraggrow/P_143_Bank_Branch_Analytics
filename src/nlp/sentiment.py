@@ -1,18 +1,22 @@
-from textblob import TextBlob
+from transformers import pipeline
+
+sentiment_model = pipeline(
+    "sentiment-analysis",
+    model="distilbert-base-uncased-finetuned-sst-2-english"
+)
 
 
 def analyze_sentiment(text):
-    """
-    Analyze sentiment of customer feedback.
-    """
+    result = sentiment_model(text)[0]
 
-    polarity = TextBlob(text).sentiment.polarity
+    label = result["label"]
+    confidence = result["score"]
 
-    if polarity > 0:
+    if label == "POSITIVE":
         sentiment = "Positive"
-    elif polarity < 0:
-        sentiment = "Negative"
     else:
-        sentiment = "Neutral"
+        sentiment = "Negative"
+
+    polarity = confidence if sentiment == "Positive" else -confidence
 
     return sentiment, polarity
