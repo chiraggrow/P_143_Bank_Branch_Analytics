@@ -92,18 +92,51 @@ def get_branches():
 
 @app.get("/branches/{branch_id}")
 def get_branch(branch_id: int):
+    with engine.connect() as connection:
+        query = BranchPerformance.__table__.select().where(
+            BranchPerformance.branch_id == branch_id
+        )
 
-    df = get_data()
+        df = pd.read_sql(query, connection)
 
-    branch = df[df["Branch_ID"] == branch_id]
+    if df.empty:
+        raise HTTPException(
+            status_code=404,
+            detail="Branch not found"
+        )
 
-    if branch.empty:
-     raise HTTPException(
-        status_code=404,
-        detail="Branch not found"
-    )
+    df = df.rename(columns={
+        "branch_id": "Branch_ID",
+        "branch_name": "Branch_Name",
+        "region": "Region",
+        "customers": "Customers",
+        "new_customers": "New_Customers",
+        "deposits": "Deposits",
+        "loans": "Loans",
+        "revenue": "Revenue",
+        "expenses": "Expenses",
+        "employees": "Employees",
+        "transactions": "Transactions",
+        "complaints": "Complaints",
+        "customer_satisfaction": "Customer_Satisfaction",
+        "profit": "Profit",
+        "profit_margin": "Profit_Margin",
+        "loan_to_deposit_ratio": "Loan_to_Deposit_Ratio",
+        "complaint_rate": "Complaint_Rate",
+        "revenue_per_employee": "Revenue_per_Employee",
+        "customers_per_employee": "Customers_per_Employee",
+        "performance_score": "Performance_Score",
+        "customer_feedback": "Customer_Feedback",
+        "sentiment": "Sentiment",
+        "polarity": "Polarity",
+        "issue_category": "Issue_Category",
+        "positive": "Positive",
+        "negative": "Negative",
+        "neutral": "Neutral",
+        "negative_feedback_rate": "Negative_Feedback_Rate"
+    })
 
-    return branch.iloc[0].to_dict()
+    return df.iloc[0].to_dict()
 
 
 # --------------------------------------------------
@@ -112,22 +145,34 @@ def get_branch(branch_id: int):
 
 @app.get("/analytics/overview")
 def get_overview():
+    with engine.connect() as connection:
+        query = """
+            SELECT
+                COALESCE(SUM(customers), 0) AS total_customers,
+                COALESCE(SUM(deposits), 0) AS total_deposits,
+                COALESCE(SUM(loans), 0) AS total_loans,
+                COALESCE(SUM(revenue), 0) AS total_revenue,
+                COALESCE(SUM(expenses), 0) AS total_expenses,
+                COALESCE(SUM(profit), 0) AS total_profit,
+                COALESCE(AVG(customer_satisfaction), 0) AS average_customer_satisfaction,
+                COALESCE(SUM(complaints), 0) AS total_complaints
+            FROM branch_performance;
+        """
 
-    df = get_data()
+        result = connection.exec_driver_sql(query).mappings().one()
 
     return {
-        "total_customers": int(df["Customers"].sum()),
-        "total_deposits": float(df["Deposits"].sum()),
-        "total_loans": float(df["Loans"].sum()),
-        "total_revenue": float(df["Revenue"].sum()),
-        "total_expenses": float(df["Expenses"].sum()),
-        "total_profit": float(df["Profit"].sum()),
+        "total_customers": int(result["total_customers"]),
+        "total_deposits": float(result["total_deposits"]),
+        "total_loans": float(result["total_loans"]),
+        "total_revenue": float(result["total_revenue"]),
+        "total_expenses": float(result["total_expenses"]),
+        "total_profit": float(result["total_profit"]),
         "average_customer_satisfaction": float(
-            df["Customer_Satisfaction"].mean()
+            result["average_customer_satisfaction"]
         ),
-        "total_complaints": int(df["Complaints"].sum())
+        "total_complaints": int(result["total_complaints"])
     }
-
 
 # --------------------------------------------------
 # NLP Feedback
@@ -157,24 +202,24 @@ def analyze_feedback(request: FeedbackRequest):
 
 @app.get("/analytics/trends")
 def get_trends():
+    with engine.connect() as connection:
+        query = """
+            SELECT
+                month AS "Month",
+                SUM(revenue) AS "Revenue",
+                SUM(expenses) AS "Expenses",
+                SUM(profit) AS "Profit",
+                SUM(deposits) AS "Deposits",
+                SUM(loans) AS "Loans",
+                SUM(customers) AS "Customers"
+            FROM branch_performance
+            GROUP BY month
+            ORDER BY month;
+        """
 
-    df = get_data()
+        result = connection.exec_driver_sql(query).mappings().all()
 
-    monthly = (
-        df.groupby("Month")
-        .agg(
-            Revenue=("Revenue", "sum"),
-            Expenses=("Expenses", "sum"),
-            Profit=("Profit", "sum"),
-            Deposits=("Deposits", "sum"),
-            Loans=("Loans", "sum"),
-            Customers=("Customers", "sum")
-        )
-        .reset_index()
-    )
-
-    return monthly.to_dict(orient="records")
-
+    return [dict(row) for row in result]
 
 # --------------------------------------------------
 # Top Branches
@@ -182,32 +227,25 @@ def get_trends():
 
 @app.get("/analytics/top-branches")
 def get_top_branches():
+    with engine.connect() as connection:
+        query = """
+            SELECT
+                branch_id AS "Branch_ID",
+                branch_name AS "Branch_Name",
+                region AS "Region",
+                SUM(profit) AS "Total_Profit",
+                AVG(profit_margin) AS "Avg_Profit_Margin",
+                AVG(customer_satisfaction) AS "Avg_Customer_Satisfaction",
+                SUM(complaints) AS "Total_Complaints"
+            FROM branch_performance
+            GROUP BY branch_id, branch_name, region
+            ORDER BY SUM(profit) DESC
+            LIMIT 10;
+        """
 
-    df = get_data()
+        result = connection.exec_driver_sql(query).mappings().all()
 
-    branch_summary = (
-        df.groupby(
-            ["Branch_ID", "Branch_Name", "Region"]
-        )
-        .agg(
-            Total_Profit=("Profit", "sum"),
-            Avg_Profit_Margin=("Profit_Margin", "mean"),
-            Avg_Customer_Satisfaction=(
-                "Customer_Satisfaction",
-                "mean"
-            ),
-            Total_Complaints=("Complaints", "sum")
-        )
-        .reset_index()
-    )
-
-    top = branch_summary.sort_values(
-        "Total_Profit",
-        ascending=False
-    ).head(10)
-
-    return top.to_dict(orient="records")
-
+    return [dict(row) for row in result]
 
 # --------------------------------------------------
 # Bottom Branches
@@ -215,56 +253,50 @@ def get_top_branches():
 
 @app.get("/analytics/bottom-branches")
 def get_bottom_branches():
+    with engine.connect() as connection:
+        query = """
+            SELECT
+                branch_id AS "Branch_ID",
+                branch_name AS "Branch_Name",
+                region AS "Region",
+                SUM(profit) AS "Total_Profit",
+                AVG(profit_margin) AS "Avg_Profit_Margin",
+                AVG(customer_satisfaction) AS "Avg_Customer_Satisfaction",
+                SUM(complaints) AS "Total_Complaints"
+            FROM branch_performance
+            GROUP BY branch_id, branch_name, region
+            ORDER BY SUM(profit) ASC
+            LIMIT 10;
+        """
 
-    df = get_data()
+        result = connection.exec_driver_sql(query).mappings().all()
 
-    branch_summary = (
-        df.groupby(
-            ["Branch_ID", "Branch_Name", "Region"]
-        )
-        .agg(
-            Total_Profit=("Profit", "sum"),
-            Avg_Profit_Margin=("Profit_Margin", "mean"),
-            Avg_Customer_Satisfaction=(
-                "Customer_Satisfaction",
-                "mean"
-            ),
-            Total_Complaints=("Complaints", "sum")
-        )
-        .reset_index()
-    )
-
-    bottom = branch_summary.sort_values(
-        "Total_Profit",
-        ascending=True
-    ).head(10)
-
-    return bottom.to_dict(orient="records")
+    return [dict(row) for row in result]
 
 
 # --------------------------------------------------
 # Regional Analysis
 # --------------------------------------------------
-
 @app.get("/analytics/regional")
 def get_regional_analysis():
+    with engine.connect() as connection:
+        query = """
+            SELECT
+                region AS "Region",
+                SUM(revenue) AS "Total_Revenue",
+                SUM(profit) AS "Total_Profit",
+                SUM(deposits) AS "Total_Deposits",
+                SUM(loans) AS "Total_Loans",
+                AVG(customer_satisfaction) AS "Avg_Customer_Satisfaction",
+                SUM(complaints) AS "Total_Complaints"
+            FROM branch_performance
+            GROUP BY region
+            ORDER BY region;
+        """
 
-    df = get_data()
+        result = connection.exec_driver_sql(query).mappings().all()
 
-    regional = (
-        df.groupby("Region")
-        .agg(
-            Total_Revenue=("Revenue", "sum"),
-            Total_Profit=("Profit", "sum"),
-            Total_Deposits=("Deposits", "sum"),
-            Total_Loans=("Loans", "sum"),
-            Avg_Customer_Satisfaction=("Customer_Satisfaction", "mean"),
-            Total_Complaints=("Complaints", "sum")
-        )
-        .reset_index()
-    )
-
-    return regional.to_dict(orient="records")
+    return [dict(row) for row in result]
 
 
 @app.get("/analytics/data")
