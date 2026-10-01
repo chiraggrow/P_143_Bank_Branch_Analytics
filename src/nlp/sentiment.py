@@ -1,22 +1,23 @@
-from transformers import pipeline
-
-sentiment_model = pipeline(
-    "sentiment-analysis",
-    model="distilbert-base-uncased-finetuned-sst-2-english"
-)
-
-
 def analyze_sentiment(text):
-    result = sentiment_model(text)[0]
+    text = text.lower()
 
-    label = result["label"]
-    confidence = result["score"]
+    positive_words = [
+        "good", "great", "excellent", "helpful",
+        "friendly", "amazing", "satisfied", "fast"
+    ]
 
-    if label == "POSITIVE":
-        sentiment = "Positive"
-    else:
-        sentiment = "Negative"
+    negative_words = [
+        "bad", "poor", "slow", "long", "waiting",
+        "issue", "problem", "not working", "worst"
+    ]
 
-    polarity = confidence if sentiment == "Positive" else -confidence
+    positive_score = sum(word in text for word in positive_words)
+    negative_score = sum(word in text for word in negative_words)
 
-    return sentiment, polarity
+    if positive_score > negative_score:
+        return "Positive", 0.8
+
+    if negative_score > positive_score:
+        return "Negative", -0.8
+
+    return "Neutral", 0.0
