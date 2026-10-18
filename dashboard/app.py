@@ -1,3 +1,4 @@
+import os
 import requests
 import streamlit as st
 import pandas as pd
@@ -251,7 +252,7 @@ st.markdown(
 
 # =========================================================
 # CONSTANTS
-API_URL = "http://127.0.0.1:8001"
+API_URL = os.getenv("API_URL", "http://127.0.0.1:8001").rstrip("/")
 
 
 @st.cache_data(ttl=60)
@@ -359,8 +360,8 @@ api_branches = get_api_data("/branches")
 
 if api_branches is None:
     st.error(
-        "FastAPI is not running. Start it using: "
-        "`uvicorn api.main:app --reload --port 8001`"
+        "Could not connect to the FastAPI backend. Check the API_URL environment variable "
+        "and confirm that the API service is live."
     )
     st.stop()
 
@@ -746,7 +747,7 @@ if st.button("Analyze Feedback", type="primary"):
 
                 with result_col2:
                     st.info(
-                        f"Polarity: {feedback_result['polarity']:.4f}"
+                        f"Confidence: {feedback_result['confidence']:.4f}"
                     )
 
             else:
